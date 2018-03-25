@@ -1,8 +1,3 @@
-# Fubuki
-
-This is the project planned to replace MFRC522_Ruby in the future.
-
-```Ruby
 Fubuki.configure do |config|
   config.reader = :mfrc522
   config.default_transceive_timeout = 77.3 # ms
@@ -39,4 +34,3 @@ Fubuki.configure do |config|
     end
   end
 end
-```
