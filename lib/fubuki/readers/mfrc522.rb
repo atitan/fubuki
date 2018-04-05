@@ -104,7 +104,8 @@ module Fubuki
         transceiver_baud_rate(:rx, 106)
 
         # Set PCD timer value for 302us default timer
-        internal_timer(@timer)
+        # 256 ticks = 77.4ms
+        internal_timer(256)
       end
 
       # Control transceive timeout value
@@ -181,22 +182,23 @@ module Fubuki
       end
 
       # Append CRC to buffer and check CRC or Mifare acknowledge
-      def transceive(protocol, send_data, accept_timeout: false, crc: true, framing_bit: 0)
+      def transceive(protocol, send_data, crc: true, framing_bit: 0)
         unless crc || @built_in_crc_disabled
           raise UsageError, 'Built-in CRC enabled while CRC is not wanted'
         end
 
-        send_data = send_data.dup
-        send_data = [send_data] if send_data.is_a?(Integer)
+        if send_data.is_a?(Array)
+          send_data = send_data.dup
+        else
+          send_data = [send_data]
+        end
         send_data.append_crc16(protocol) if @built_in_crc_disabled && crc
 
         puts "Sending Data: #{send_data.to_bytehex}" if ENV['DEBUG']
 
         # Transfer data
         status, received_data, valid_bits = communicate_with_picc(PCD_Transceive, send_data, framing_bit)
-        return if status == :status_picc_timeout && accept_timeout
-        raise PICCTimeoutError if status == :status_picc_timeout
-        raise CommunicationError, status if status != :status_ok
+        return status if status != :status_ok
 
         puts "Received Data: #{received_data.to_bytehex}" if ENV['DEBUG']
         puts "Valid bits: #{valid_bits}" if ENV['DEBUG']
@@ -206,7 +208,7 @@ module Fubuki
           raise IncorrectCRCError unless received_data.check_crc16(protocol, true)
         end
 
-        return received_data, valid_bits
+        return status, received_data, valid_bits
       end
 
       def collision_detail
