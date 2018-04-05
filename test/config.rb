@@ -7,7 +7,7 @@ Fubuki.configure do |config|
     PiPiper::Pin.new(pin: 24, direction: :out).on
   end
 
-  config.read_register = Proc.new |register|
+  config.read_register = Proc.new do |register|
     output = nil
     PiPiper::Spi.begin do |spi|
       spi.chip_select_active_low(true)

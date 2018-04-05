@@ -3,9 +3,9 @@ require 'fubuki/reader'
 module Fubuki
   module Readers
     class PN512 < Reader
-      protocol :a, :b, :felica, :mifare
-      baud_rate 106, 212, 424, 848
-      buffer_size 64
+      spec :protocol, [:a, :b, :felica, :mifare]
+      spec :baud_rate, [106, 212, 424, 848, 1696, 3392]
+      spec :buffer_size, 64
 
       def soft_reset
       end

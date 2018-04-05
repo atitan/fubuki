@@ -16,17 +16,34 @@ module Fubuki
 
   def reader
     return @reader if defined?(@reader) && @reader
+
     reader = configuration.reader
   end
 
   def reader=(model)
-    require "fubuki/readers/#{model.downcase}"
+    require "fubuki/readers/#{model.to_s.downcase}"
     klass_name = model.to_s.upcase
     @reader = Fubuki::Readers.const_get(klass_name)
   end
 
+  def protocol
+    return @protocol if defined?(@protocol) && @protocol
+
+    raise UndefinedProtocolError
+  end
+
+  def protocol=(type)
+    raise UnsupportedProtocolError unless reader.protocol?(type.to_sym)
+
+    require "fubuki/protocols/#{type.to_s.downcase}"
+    klass_name = type.to_s.capitalize
+    @protocol = Fubuki::Protocols.const_get(klass_name)
+    reader.setup_for(type.to_sym)
+  end
+
   def method_missing(sym, *args, &block)
-    return reader.send(sym, *args) if reader.respond_to?(sym)
+    return protocol.send(sym, *args, &block) if protocol.respond_to?(sym)
+
     super
   end
 end

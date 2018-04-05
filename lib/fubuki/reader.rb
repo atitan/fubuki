@@ -5,51 +5,30 @@ module Fubuki
     include Singleton
 
     class << self
-      def protocol?(types)
-        @capability ||= types
+      def transceive(protocol, *args)
+        raise UnsupportedProtocolError unless protocol?(protocol)
+        instance.transceive(protocol, *args)
       end
 
-      def baud_rate(*types)
-        @capability ||= types
+      def method_missing(sym, *args)
+        return instance.send(sym, *args) if instance.respond_to?(sym)
+
+        super
       end
 
-      def buffer_size
-        @capability ||= types
-      end
+      private
 
-      def soft_reset
-      end
-
-      def config_reset
-      end
-
-      def internal_timer
-      end
-
-      def transceiver_baud_rate
-      end
-
-      def antenna_on
-        
-      end
-
-      def antenna_off
-        
-      end
-
-      def antenna_gain
-      end
-
-      def mifare_crypto1_authenticate
-        raise 'dfbdbfs' unless capable_of?(:mifare)
-      end
-
-      def mifare_crypto1_deauthenticate
-        
-      end
-
-      def transceive
-        
+      def spec(feature, capabilities)
+        instance_variable_set("@#{feature}", capabilities)
+        module_eval <<-STR, __FILE__, __LINE__ + 1
+          def #{feature}
+            instance.instance_variable_get(#{feature})
+          end
+          def #{feature}?(capabilitiy)
+            return nil unless #{feature}.is_a?(Array)
+            #{feature}.include?(capabilitiy)
+          end
+        STR
       end
     end
 
