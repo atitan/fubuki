@@ -20,9 +20,9 @@ module Fubuki
 
       def spec(feature, capabilities)
         instance_variable_set("@#{feature}", capabilities)
-        module_eval <<-STR, __FILE__, __LINE__ + 1
+        instance_eval <<-STR, __FILE__, __LINE__ + 1
           def #{feature}
-            instance.instance_variable_get(#{feature})
+            @#{feature}
           end
           def #{feature}?(capabilitiy)
             return nil unless #{feature}.is_a?(Array)
@@ -33,7 +33,7 @@ module Fubuki
     end
 
     def initialize
-      Fubiki.configuration.startup.call
+      Fubuki.configuration.startup.call
       sleep 0.05
 
       soft_reset
@@ -44,11 +44,11 @@ module Fubuki
     private
 
     def read_register(reg)
-      Fubiki.configuration.read_register.call(reg)
+      Fubuki.configuration.read_register.call(reg)
     end
 
     def write_register(reg, data)
-      Fubiki.configuration.write_register.call(reg, data)
+      Fubuki.configuration.write_register.call(reg, data)
     end
 
     def set_register_bitmask(reg, mask)

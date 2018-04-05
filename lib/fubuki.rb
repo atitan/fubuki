@@ -17,10 +17,10 @@ module Fubuki
   def reader
     return @reader if defined?(@reader) && @reader
 
-    reader = configuration.reader
+    set_reader(configuration.reader)
   end
 
-  def reader=(model)
+  def set_reader(model)
     require "fubuki/readers/#{model.to_s.downcase}"
     klass_name = model.to_s.upcase
     @reader = Fubuki::Readers.const_get(klass_name)
