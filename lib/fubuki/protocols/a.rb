@@ -20,7 +20,7 @@ module Fubuki
         Fubuki.reader.config_reset
 
         command = wakeup ? PICC_WUPA : PICC_REQA
-        status, received_data, valid_bits = transceive(command, crc: false, framing_bit: 7)
+        status, received_data, valid_bits = transceive(command, crc: false, framing_bit: 0x07)
 
         # REQA or WUPA command return 16 bits(full byte)
         return false unless status == :status_ok && valid_bits == 0

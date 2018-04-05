@@ -38,7 +38,6 @@ module Fubuki
     require "fubuki/protocols/#{type.to_s.downcase}"
     klass_name = type.to_s.capitalize
     @protocol = Fubuki::Protocols.const_get(klass_name)
-    reader.setup_for(type.to_sym)
   end
 
   def method_missing(sym, *args, &block)

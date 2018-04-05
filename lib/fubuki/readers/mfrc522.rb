@@ -79,13 +79,12 @@ module Fubuki
 
       def soft_reset
         write_register(CommandReg, PCD_SoftReset)
-        sleep 1.0 / 20.0 # wait 50ms
+        sleep 0.05 # wait 50ms
 
         write_register(TModeReg, 0x87) # Start timer by setting TAuto=1, and higher part of TPrescalerReg
         write_register(TPrescalerReg, 0xFF) # Set lower part of TPrescalerReg, and results in 302us timer (f_timer = 13.56 MHz / (2*TPreScaler+1))
         
         write_register(TxASKReg, 0x40) # Default 0x00. Force a 100 % ASK modulation independent of the ModGsPReg register setting
-        write_register(ModeReg, 0x3D) # Default 0x3F. Set the preset value for the CRC coprocessor for the CalcCRC command to 0x6363 (ISO 14443-3 part 6.2.4)
       end
 
       # Reset PCD config to default
@@ -94,7 +93,7 @@ module Fubuki
         write_register(CommandReg, PCD_Idle)
 
         # Stop crypto1 communication
-        mifare_crypto1_deauthenticate
+        mifare_deauthenticate
 
         # Clear ValuesAfterColl bit
         clear_register_bitmask(CollReg, 0x80)
@@ -146,16 +145,6 @@ module Fubuki
         clear_register_bitmask(TxControlReg, 0x03)
       end
 
-      # Modify and show antenna gain level
-      # level = 1: 18dB, 2: 23dB, 3: 33dB, 4: 38dB, 5: 43dB, 6: 48dB
-      def antenna_gain(level = nil)
-        unless level.nil?
-          level = 1 if level > 6 || level < 1
-          set_register_bitmask(RFCfgReg, ((level + 1) << 4))
-        end
-        (read_register(RFCfgReg) & 0x70) >> 4
-      end
-
       # Start Crypto1 communication between reader and Mifare PICC
       #
       # PICC must be selected before calling for authentication
@@ -164,7 +153,7 @@ module Fubuki
       # Accept PICC_MF_AUTH_KEY_A or PICC_MF_AUTH_KEY_B command
       # Checks datasheets for block address numbering of your PICC
       #
-      def mifare_crypto1_authenticate(command, block_addr, sector_key, uid)
+      def mifare_authenticate(command, block_addr, sector_key, uid)
         # Buffer[12]: {command, block_addr, sector_key[6], uid[4]}
         buffer = [command, block_addr]
         buffer.concat(sector_key[0..5])
@@ -177,7 +166,7 @@ module Fubuki
       end
 
       # Stop Crypto1 communication
-      def mifare_crypto1_deauthenticate
+      def mifare_deauthenticate
         clear_register_bitmask(Status2Reg, 0x08) # Clear MFCrypto1On bit
       end
 
@@ -198,7 +187,7 @@ module Fubuki
 
         # Transfer data
         status, received_data, valid_bits = communicate_with_picc(PCD_Transceive, send_data, framing_bit)
-        return status if status != :status_ok
+        return status, received_data, valid_bits if status != :status_ok
 
         puts "Received Data: #{received_data.to_bytehex}" if ENV['DEBUG']
         puts "Valid bits: #{valid_bits}" if ENV['DEBUG']
@@ -229,12 +218,12 @@ module Fubuki
         wait_irq = 0x10 if command == PCD_MFAuthent
         wait_irq = 0x30 if command == PCD_Transceive
 
-        write_register(CommandReg, PCD_Idle)               # Stop any active command.
-        write_register(ComIrqReg, 0x7F)                    # Clear all seven interrupt request bits
+        write_register(CommandReg, PCD_Idle)         # Stop any active command.
+        write_register(ComIrqReg, 0x7F)              # Clear all seven interrupt request bits
         set_register_bitmask(FIFOLevelReg, 0x80)     # FlushBuffer = 1, FIFO initialization
-        write_register(FIFODataReg, send_data)             # Write sendData to the FIFO
-        write_register(BitFramingReg, framing_bit)         # Bit adjustments
-        write_register(CommandReg, command)                # Execute the command
+        write_register(FIFODataReg, send_data)       # Write sendData to the FIFO
+        write_register(BitFramingReg, framing_bit)   # Bit adjustments
+        write_register(CommandReg, command)          # Execute the command
         if command == PCD_Transceive
           set_register_bitmask(BitFramingReg, 0x80)  # StartSend=1, transmission of data starts
         end
