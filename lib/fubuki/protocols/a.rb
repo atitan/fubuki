@@ -13,14 +13,14 @@ module Fubuki
       PICC_HLTA         = 0x50  # HaLT command, Type A. Instructs an ACTIVE PICC to go to state HALT.
 
       def transceive(data, *args)
-        Fubuki.reader.transceive(:a, data, *args)
+        Fubuki.reader.transceive(data, *args)
       end
 
       def request(wakeup = false)
         Fubuki.reader.config_reset
 
         command = wakeup ? PICC_WUPA : PICC_REQA
-        status, received_data, valid_bits = transceive(command, crc: false, framing_bit: 0x07)
+        status, received_data, valid_bits = transceive(command, crc: false, tx_lastbits: 7)
 
         # REQA or WUPA command return 16 bits(full byte)
         return false unless status == :status_ok && valid_bits == 0
@@ -116,10 +116,8 @@ module Fubuki
               buffer = buffer[0...buffer_length]
             end
 
-            framing_bit = (tx_last_bits << 4) + tx_last_bits
-
             # Select it
-            status, received_data, valid_bits = transceive(buffer, crc: false, framing_bit: framing_bit)
+            status, received_data, valid_bits = transceive(buffer, crc: false, rx_align: tx_last_bits, tx_lastbits: tx_last_bits)
 
             if status != :status_ok && status != :status_collision
               raise CommunicationError, status

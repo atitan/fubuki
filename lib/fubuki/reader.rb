@@ -5,11 +5,6 @@ module Fubuki
     include Singleton
 
     class << self
-      def transceive(protocol, *args)
-        raise UnsupportedProtocolError unless protocol?(protocol)
-        instance.transceive(protocol, *args)
-      end
-
       def method_missing(sym, *args)
         return instance.send(sym, *args) if instance.respond_to?(sym)
 
@@ -35,10 +30,7 @@ module Fubuki
     def initialize
       Fubuki.configuration.startup.call
       sleep 0.05
-
       soft_reset
-      config_reset
-      antenna_on
     end
 
     private
@@ -53,12 +45,25 @@ module Fubuki
 
     def set_register_bitmask(reg, mask)
       value = read_register(reg)
-      write_register(reg, value | mask)
+      new_value = value | mask
+      return if value == new_value
+      write_register(reg, new_value)
     end
 
     def clear_register_bitmask(reg, mask)
       value = read_register(reg)
-      write_register(reg, value & (~mask))
+      new_value = value & (~mask)
+      return if value == new_value
+      write_register(reg, new_value)
+    end
+
+    def clear_and_set_register_bitmask(reg, mask, set_bits)
+      raise UsageError, 'set_bits out of mask' if set_bits & mask != set_bits
+      value = read_register(reg)
+      new_value = value & (~mask)
+      new_value = new_value | set_bits
+      return if value == new_value
+      write_register(reg, new_value)
     end
   end
 end

@@ -17,10 +17,10 @@ module Fubuki
   def reader
     return @reader if defined?(@reader) && @reader
 
-    set_reader(configuration.reader)
+    use_reader(configuration.reader)
   end
 
-  def set_reader(model)
+  def use_reader(model)
     require "fubuki/readers/#{model.to_s.downcase}"
     klass_name = model.to_s.upcase
     @reader = Fubuki::Readers.const_get(klass_name)
@@ -38,10 +38,11 @@ module Fubuki
     require "fubuki/protocols/#{type.to_s.downcase}"
     klass_name = type.to_s.capitalize
     @protocol = Fubuki::Protocols.const_get(klass_name)
+    reader.apply_protocol(type.to_sym)
   end
 
-  def method_missing(sym, *args, &block)
-    return protocol.send(sym, *args, &block) if protocol.respond_to?(sym)
+  def method_missing(sym, *args)
+    return protocol.send(sym, *args) if protocol.respond_to?(sym)
 
     super
   end

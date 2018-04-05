@@ -91,37 +91,96 @@ module Fubuki
         sleep 0.05 # wait 50ms
 
         write_register(TModeReg, 0x87) # Start timer by setting TAuto=1, and higher part of TPrescalerReg
-        write_register(TPrescalerReg, 0xFF) # Set lower part of TPrescalerReg, and results in 302us timer (f_timer = 13.56 MHz / (2*TPreScaler+1))        
+        write_register(TPrescalerReg, 0xFF) # Set lower part of TPrescalerReg, and results in 302us timer (f_timer = 13.56 MHz / (2*TPreScaler+1))
+        write_register(RFCfgReg, 0x59)
+        set_register_bitmask(TxControlReg, 0x84)
+        write_register(RxSelReg, 0x80)
+        write_register(ModeReg, 0x00)
+        write_register(GsNOnReg, 0xFF)
+        write_register(CWGsPReg, 0x3F)
+        write_register(GsNOffReg, 0xF2)
+        write_register(BitFramingReg, 0x00)
+        write_register(WaterLevelReg, buffer_size - 9)
       end
 
       def config_reset
-         # Stop current command
-        write_register(CommandReg, PCD_Idle)
+        antenna_off
 
+        # Stop current command
+        write_register(CommandReg, PCD_Idle)
         # Stop crypto1 communication
         mifare_deauthenticate
-
         # Clear ValuesAfterColl bit
         clear_register_bitmask(CollReg, 0x80)
 
-        # Reset transceiver baud rate to 106 kBd
-        transceiver_baud_rate(:tx, 106)
-        transceiver_baud_rate(:rx, 106)
+        case @current_protocol
+        when :a, :b
+          transceiver_baud_rate(:tx, 106)
+          transceiver_baud_rate(:rx, 106)
+        when :felica
+          transceiver_baud_rate(:tx, 212)
+          transceiver_baud_rate(:rx, 212)
+        else
+          raise UnsupportedProtocolError
+        end
 
-        # Set PCD timer value for 302us default timer
-        # 256 ticks = 77.4ms
-        internal_timer(256)
+        internal_timer(Fubuki.configuration.default_transceive_timeout)
+
+        antenna_on
+      end
+
+      def apply_protocol(protocol)
+        return if @current_protocol == protocol
+        @current_protocol = protocol
+
+        case protocol
+        when :a
+          write_register(RxThresholdReg, 0x55)
+          write_register(ControlReg, 0x10)
+          # Enable transceive parity bit
+          clear_register_bitmask(ManualRCVReg, 0x10)
+          # Force 100% ASK
+          write_register(TxAutoReg, 0x40)
+          write_register(ModGsPReg, 0x3F)
+          # RxWait clock
+          clear_and_set_register_bitmask(RxSelReg, 0x3F, 0x08)
+        when :b
+          write_register(RxThresholdReg, 0x50)
+          write_register(TypeBReg, 0x00)
+          write_register(ControlReg, 0x10)
+          # Enable transceive parity bit
+          clear_register_bitmask(ManualRCVReg, 0x10)
+          # Set ASK
+          write_register(TxAutoReg, 0x00)
+          write_register(ModGsPReg, 0x11)
+          # RxWait clock
+          clear_and_set_register_bitmask(RxSelReg, 0x3F, 0x08)
+        when :felica
+          write_register(RxThresholdReg, 0x55)
+          write_register(ControlReg, 0x10)
+          # Disable transceive parity bit
+          set_register_bitmask(ManualRCVReg, 0x10)
+          # Set ASK
+          write_register(TxAutoReg, 0x00)
+          write_register(ModGsPReg, 0x12)
+          # RxWait clock
+          clear_and_set_register_bitmask(RxSelReg, 0x3F, 0x03)
+        else
+          raise UnsupportedProtocolError
+        end
+
+        config_reset
       end
 
       def internal_timer(timer = nil)
         if timer
+          timer = (timer / 0.302).round
           write_register(TReloadRegH, (timer >> 8) & 0xFF)
           write_register(TReloadRegL, (timer & 0xFF))
         end
         (read_register(TReloadRegH) << 8) | read_register(TReloadRegL)
       end
 
-      ## TODO FIX IT
       def transceiver_baud_rate(direction, value = nil)
         reg = {tx: TxModeReg, rx: RxModeReg}
         speed = {106 => 0, 212 => 1, 424 => 2, 848 => 3}
@@ -129,9 +188,28 @@ module Fubuki
 
         if value
           value = speed.fetch(value)
-          @built_in_crc_disabled = (value == 0)
-          write_register(ModWidthReg, mod.fetch(value))
+
+          case @current_protocol
+          when :a
+            @built_in_crc_disabled = value == 0
+            framing = 0b00
+          when :b
+            @built_in_crc_disabled = false
+            framing = 0b11
+          when :felica
+            @built_in_crc_disabled = false
+            framing = 0b10
+          else
+            raise UnsupportedProtocolError
+          end
+
+          # Set tx mod width
+          if direction == :tx
+            write_register(ModWidthReg, mod.fetch(value))
+          end
+
           value <<= 4
+          value |= framing
           value |= 0x80 unless @built_in_crc_disabled
           write_register(reg.fetch(direction), value)
         end
@@ -163,24 +241,18 @@ module Fubuki
         clear_register_bitmask(Status2Reg, 0x08) # Clear MFCrypto1On bit
       end
 
-      def picc_transceive(protocol, send_data, crc: true, framing_bit: 0)
-        set_transceiver_protocol(protocol)
-
+      def transceive(send_data, crc: true, rx_align: 0, tx_lastbits: 0)
         unless crc || @built_in_crc_disabled
           raise UsageError, 'Built-in CRC enabled while CRC is not wanted'
         end
 
-        if send_data.is_a?(Array)
-          send_data = send_data.dup
-        else
-          send_data = [send_data]
-        end
-        send_data.append_crc16(protocol) if @built_in_crc_disabled && crc
+        send_data = send_data.is_a?(Array) ? send_data.dup : [send_data]
+        send_data.append_crc16(@current_protocol) if @built_in_crc_disabled && crc
 
         puts "Sending Data: #{send_data.to_bytehex}" if ENV['DEBUG']
 
         # Transfer data
-        status, received_data, valid_bits = communicate_with_picc(PCD_Transceive, send_data, framing_bit)
+        status, received_data, valid_bits = communicate_with_picc(PCD_Transceive, send_data, rx_align, tx_lastbits)
         return status, received_data, valid_bits if status != :status_ok
 
         puts "Received Data: #{received_data.to_bytehex}" if ENV['DEBUG']
@@ -188,7 +260,7 @@ module Fubuki
 
         # Data exists, check CRC
         if received_data.size > 2 && @built_in_crc_disabled && crc
-          raise IncorrectCRCError unless received_data.check_crc16(protocol, true)
+          raise IncorrectCRCError unless received_data.check_crc16(@current_protocol, true)
         end
 
         return status, received_data, valid_bits
@@ -207,10 +279,12 @@ module Fubuki
 
       private
 
-      def communicate_with_picc(command, send_data, framing_bit)
+      def communicate_with_picc(command, send_data, rx_align, tx_lastbits)
         wait_irq = 0x00
         wait_irq = 0x10 if command == PCD_MFAuthent
         wait_irq = 0x30 if command == PCD_Transceive
+
+        framing_bit = ((rx_align << 4) & 0x07) & (tx_lastbits & 0x07)
 
         write_register(CommandReg, PCD_Idle)         # Stop any active command.
         write_register(ComIrqReg, 0x7F)              # Clear all seven interrupt request bits
@@ -253,15 +327,6 @@ module Fubuki
         status = :status_collision if (error & 0x08) != 0 # CollErr
 
         return status, received_data, valid_bits
-      end
-
-      def set_transceiver_protocol(protocol)
-        return if @current_protocol == protocol
-
-        value = {a: 0x00, b: 0x03, felica: 0x02}
-
-        write_register(TxModeReg, value.fetch(protocol))
-        write_register(RxModeReg, value.fetch(protocol))
       end
 
       def read_register(reg)
