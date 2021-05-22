@@ -1,3 +1,5 @@
+Gemfile.lock
+*.so
 *.gem
 *.rbc
 /.config
