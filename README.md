@@ -1,42 +1,26 @@
 # Fubuki
 
-This is the project planned to replace MFRC522_Ruby in the future.
 
+## Requirements
+
+libgpiod-dev
+
+## Usage
+
+### SPI
 ```Ruby
-Fubuki.configure do |config|
-  config.reader = :mfrc522
-  config.default_transceive_timeout = 77.3 # ms
+spi_bus = 0
+spi_device = 0
 
-  config.startup = Proc.new do
-    # Pull up NRSTPD pin
-    PiPiper::Pin.new(pin: 24, direction: :out).on
-  end
+spi = Fubuki::SPI.new(spi_bus, spi_device)
 
-  config.read_register = Proc.new |register|
-    output = nil
-    PiPiper::Spi.begin do |spi|
-      spi.chip_select_active_low(true)
-      spi.bit_order PiPiper::Spi::MSBFIRST
-      spi.clock 8000000
+spi.transfer([0x01, 0x02, 0x03])
+=> [0x10, 0x20, 0x30]
 
-      spi.chip_select(PiPiper::Spi::CHIP_SELECT_0) do
-        spi.write((register << 1) & 0x7E | 0x80)
-        output = spi.read
-      end
-    end
-    output
-  end
+spi.close
+```
 
-  config.write_register = Proc.new do |register, data|
-    PiPiper::Spi.begin do |spi|
-      spi.chip_select_active_low(true)
-      spi.bit_order PiPiper::Spi::MSBFIRST
-      spi.clock 8000000
-
-      spi.chip_select(PiPiper::Spi::CHIP_SELECT_0) do
-        spi.write((register << 1) & 0x7E, *data)
-      end
-    end
-  end
-end
+### GPIO
+```Ruby
+Fubuki::GPIO
 ```
