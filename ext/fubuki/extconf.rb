@@ -14,7 +14,6 @@ REQUIRED_HEADER = %w[
   sys/ioctl.h
   linux/types.h
   linux/spi/spidev.h
-  gpiod.h
 ].freeze
 
 REQUIRED_HEADER.each do |header|

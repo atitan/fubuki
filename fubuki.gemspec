@@ -3,8 +3,8 @@ require File.expand_path("../lib/fubuki/version.rb", __FILE__)
 Gem::Specification.new do |s|
   s.name          = 'fubuki'
   s.version       = Fubuki::VERSION
-  s.date          = '2021-05-31'
-  s.summary       = 'This is the project planned to replace MFRC522_Ruby in the future.'
+  s.date          = '2021-05-23'
+  s.summary       = 'SPI Library.'
   s.authors       = ['atitan']
   s.email         = ['commit@atifans.net']
   s.require_path  = 'lib'
