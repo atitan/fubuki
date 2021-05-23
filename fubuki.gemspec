@@ -1,4 +1,4 @@
-require File.expand_path("../lib/fubuki/version.rb", __FILE__)
+require File.expand_path("../lib/fubuki.rb", __FILE__)
 
 Gem::Specification.new do |s|
   s.name          = 'fubuki'
